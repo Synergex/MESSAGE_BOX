@@ -1,0 +1,386 @@
+SUBROUTINE MESSAGE_BOX	; created: 12th November 1991
+	PARENT_WND_ID	,N	; Parent Window Id from calling Program for output when Batch Mode (TT Chn or UI-Tookit Chn)
+	TIMEOUT		,D	; Seconds before timing out, set to 0 to force user to enter selection or
+				; Seconds to remain on screen - returns ANSWER=9 IF TIMES OUT
+	MESSID		,A	; message ID to put in box heading (optional)
+	OK		,A	; optional button 1 ; make this button active and use value as label. ButtonText[\][+]Tool Tip Text
+	YES		,A	; optional button 2 ; to have tooltip use \ OR + to delimit ButtonText\ToolTipText
+	NO		,A	; optional button 3 ; eg 'NO\[+]Do Not Continue'
+	CANCEL		,A	; optional button 4 ; names OK, Yes, No etc are arbitary. You can use as you like
+	SKIP		,A	; optional button 5 ; If you enclose the Button Label in [ ] then it will default to this button on Enter
+	ANSWER		,N	; button pressed - returned
+				;	 1 = OK button (1st Button)
+				;	 2 = YES button (2nd Button)
+				;	 3 = NO button (3rd button)
+				;	 4 = CANCEL button
+				;	 5 = SKIP button
+				;	 8 = EXITKEY (site specific)
+				;	 9 = TIMED OUT
+				;	-9 = PF_KEY Pressed, see PFKEY
+	MESS1		,A	; optional Message text line 1
+	MESS2		,A	; optional
+	MESS3		,A	; optional
+	MESS4		,A	; optional
+	MESS5		,A	; optional Message text line 5
+	PF_ALLOWED	,A	; optional IF PASSED THEN PF KEYS ALLOWED, BUT YOU MUST CHECK THEM IN YOUR PROGRAM
+				;          Pass as "Y" TO ALLOW ALL OR "F2 F1 F11 " etc !! must have a trailing space !!
+	PFKEY		,A	; optional PFKEY returned to program
+
+	; If the user presses the first CHAR_Acter of the Button then that button will fire ; eg Y for Yes, A for Abort, depending on the button text
+	; eg xcall MESSAGE_BOX (10,'MessageID','NO+Press to accept','Yes+Press to delete',,,,answer,'Is it ok to delete')
+	; wait 10 seconds for user response
+	; messageID
+	; button No  - tooltip "Press to accept"
+	; Button Yes - tooltip "Press to delete"
+	; No button
+	; No button
+	; No button
+	; return value - in Answer
+	; Message text - "Is if ok to delete"
+	; no more text
+
+.include 'DBLDIR:windows.def'
+.include "WND:tools.def"
+.include "WND:inpctl.def"
+
+external function
+	message_ok_text		,a		; function to return the Button Text
+	message_ok_tooltip	,a		; function to return the Tool Tip Text
+RECORD work
+	messageid	,a30	; displayed in Heading
+	blanks		,a50
+	pos		,i4
+	WMAX		,D3	; width of message
+	msg_wnd_id	,i4	; 
+	t_wait		,i4	; time out
+	line_cnt	,i4	; lines on screen
+	CHAR_D		,d3	; DECMAL OF ENTERED CHAR_ACTER (key value)
+	CHAR_A		,a1	; Data entered by user (key value)
+	button_char	,5a1	; first CHAR_Acter of each button
+	FLAGS		,D10	; save the flags and reset on exit
+	PF_KEY		,A10	; PFKEY pressed
+	parent_rows	,I4	; size of parent window
+	parent_cols	,I4	; size of parent window
+	msg_rows	,i4	; size of current message window
+	msg_cols	,i4	; size of current message window
+	u_error		,d3	; window error
+RECORD STATIC
+	VT_BATCH	,A1	; set when running in batch (site specific)
+	prev_m_row_pos	,i4	; position of message box from previous
+	prev_m_col_pos	,i4	; position of message box from previous
+	prev_p_rows	,i4	; size of previous primary window
+	prev_p_cols	,i4	; size of previous primary window 
+	prev_m_rows	,i4	; size of previous message window
+	prev_m_cols	,i4	; size of previous message window
+PROC
+	init work
+	onerror u_start									; NEED TO CAPTURE ERROR IF CALLING PROGRAM OLD STYLE
+	goto main
+u_start,
+	XCALL ERROR (U_ERROR)
+	if (u_error.eq.329.and.VT_BATCH.ne.'B') u_start (,,,,,,,250,,253)		; 329 = ui_toolkit not started
+	offerror									; other errors will fall thru and cause a crash
+main,
+	ANSWER =
+	if (%passed(pfkey)) pfkey =
+	IF (VT_BATCH.EQ.' ') BEGIN
+		XCALL GETLOG ('BATCH',VT_BATCH,POS)					; I use the Variable BATCH containing B to indicate it is
+		IF (.NOT.VT_BATCH) VT_BATCH = 'N'					; being called from a BATCH file and not to wait, Response = 0
+	END
+	XCALL FLAGS (FLAGS,2)								; save current FLAGS settings
+	IF (VT_BATCH.EQ.'B') THEN BEGIN
+		if (.not.u_error) then begin						; in UI-TOOLKIT
+			IF (%PASSED(MESSID)) XCALL W_DISP (PARENT_WND_ID,WD_WRITES,'Message '+messid)	; Code for running in Batch
+			IF (%PASSED(MESS1))  XCALL W_DISP (PARENT_WND_ID,WD_WRITES,'Message '+mess1)	; Site specific
+			IF (%PASSED(MESS2))  XCALL W_DISP (PARENT_WND_ID,WD_WRITES,'Message '+mess2)	; commented out for publication
+			IF (%PASSED(MESS3))  XCALL W_DISP (PARENT_WND_ID,WD_WRITES,'Message '+mess3)	; PARENT_WND_ID if a common variable or 
+			IF (%PASSED(MESS4))  XCALL W_DISP (PARENT_WND_ID,WD_WRITES,'Message '+mess4)	; could be hard coded to say as chn 15
+			IF (%PASSED(MESS5))  XCALL W_DISP (PARENT_WND_ID,WD_WRITES,'Message '+mess5)
+			XCALL W_DISP (PARENT_WND_ID,WD_WRITES,blanks)
+			xcall w_updt
+		end else begin										; in Old Code (OPEN (CHN,I,'TT:')
+			IF (%PASSED(MESSID)) WRITES (PARENT_WND_ID,'Message '+messid)			; Code for running in Batch
+			IF (%PASSED(MESS1))  WRITES (PARENT_WND_ID,'Message '+mess1)			; Site specific
+			IF (%PASSED(MESS2))  WRITES (PARENT_WND_ID,'Message '+mess2)			; commented out for publication
+			IF (%PASSED(MESS3))  WRITES (PARENT_WND_ID,'Message '+mess3)			; PARENT_WND_ID if a common variable or 
+			IF (%PASSED(MESS4))  WRITES (PARENT_WND_ID,'Message '+mess4)			; could be hard coded to say as chn 15
+			IF (%PASSED(MESS5))  WRITES (PARENT_WND_ID,'Message '+mess5)
+			WRITES (PARENT_WND_ID,blanks)
+		end
+		ANSWER = -1									; You may want a specific answer returned in Batch
+		sleep 0.5									; You may want to reduce the sleep time for performance
+	END ELSE BEGIN
+		parent_rows = %w_info(WIF_SROWS, WID_CONTAINER)					; get size of parent window
+		parent_cols = %w_info(WIF_SCOLS, WID_CONTAINER)					; get size of parent window
+		WMAX =
+		messageid =
+		t_wait = TIMEOUT
+		if (%passed(messid)) messageid = messid
+		IF (%passed(mess1)) IF (%TRIM(MESS1).GT.WMAX) WMAX = %TRIM(MESS1)		; work out size of message text
+		IF (%passed(mess2)) IF (%TRIM(MESS2).GT.WMAX) WMAX = %TRIM(MESS2)
+		IF (%passed(mess3)) IF (%TRIM(MESS3).GT.WMAX) WMAX = %TRIM(MESS3)
+		IF (%passed(mess4)) IF (%TRIM(MESS4).GT.WMAX) WMAX = %TRIM(MESS4)
+		IF (%passed(mess5)) IF (%TRIM(MESS5).GT.WMAX) WMAX = %TRIM(MESS5)
+
+		IF (%passed(mess1)) incr line_cnt						; work out how many lines of text
+		IF (%passed(mess2)) incr line_cnt
+		IF (%passed(mess3)) incr line_cnt
+		IF (%passed(mess4)) incr line_cnt
+		IF (%passed(mess5)) incr line_cnt
+ 
+		wmax = wmax + 2
+		IF (WMAX.GT.78) WMAX = 78
+		IF (WMAX.LT.25) WMAX = 25
+		XCALL W_PROC (WP_CREATE, msg_wnd_id, "m_b", 6, wmax)
+		xcall w_area(msg_wnd_id, WA_FILL, ' ')
+		u_rend(D_LOAD, D_RND_INP_BCK, 0, 3)
+		xcall w_area(msg_wnd_id, WA_COLOR, 3)
+		xcall w_disp(msg_wnd_id, wd_color, 3)
+
+		msg_rows = %w_info(WIF_ROWS, msg_wnd_id)					; get size of message box
+		msg_cols = %w_info(WIF_COLS, msg_wnd_id)					; get size of message box
+
+		; have they previously moved the message box and same window sizes
+		if (prev_m_row_pos.and.prev_p_rows.eq.parent_rows.and.prev_p_cols.eq.parent_cols.and.prev_m_rows.eq.msg_rows.and.prev_m_cols.eq.msg_cols) then begin
+			XCALL W_PROC (WP_PLACE, msg_wnd_id, (prev_m_row_pos), (prev_m_col_pos))
+		end else begin
+			XCALL W_PROC (WP_PLACE, msg_wnd_id, (parent_rows-6)/2, (parent_cols-wmax)/2)	; always 6 lines by wmax columns, work out middle
+		end
+		prev_m_rows = msg_rows									; save the size of the msg box
+		prev_m_cols = msg_cols									; save the size of the msg box
+		pos =
+
+;		xcall w_brdr(msg_wnd_id, WB_DRAGOFF )
+		XCALL W_BRDR(msg_wnd_id, wb_on, wb_title, '"'+%atrim(messageid)+'"')
+
+		xcall b_buttonset (msg_wnd_id,dsb_bottom,,dsb_center,'*NONE*')
+		xcall w_updt
+		
+		; SETUP BUTTONS
+		if (%passed(ok)) begin
+			button_char(1) = %message_ok_char(OK)
+			xcall b_button (msg_wnd_id,dsb_add,'OK_#',dsb_TEXT,%message_ok_text(OK),,,button_char(1),,%message_ok_tooltip(ok))
+			xcall B_ENABLE(msg_wnd_id, 'OK_#')
+		end
+		if (%passed(yes)) begin
+			button_char(2) = %message_ok_char(Yes)
+			xcall b_button (msg_wnd_id,dsb_add,'YES_#',dsb_TEXT,%message_ok_text(yes),,,button_char(2),,%message_ok_tooltip(yes))
+			xcall B_ENABLE(msg_wnd_id, 'YES_#')
+		end
+
+		if (%passed(no)) begin
+			button_char(3) = %message_ok_char(NO)
+			xcall b_button (msg_wnd_id,dsb_add,'NO_#',dsb_TEXT,%message_ok_text(no),,,button_char(3),,%message_ok_tooltip(no))
+			xcall B_ENABLE(msg_wnd_id, 'NO_#')
+		end
+
+		if (%passed(cancel)) begin
+			button_char(4) = %message_ok_char(cancel)
+			xcall b_button (msg_wnd_id,dsb_add,'CAN_#',dsb_TEXT,%message_ok_text(cancel),,,button_char(4),,%message_ok_tooltip(cancel))
+			xcall B_ENABLE(msg_wnd_id, 'CAN_#')
+		end
+
+		if (%passed(skip)) begin
+			button_char(5) = %message_ok_char(skip)
+			xcall b_button (msg_wnd_id,dsb_add,'SKIP_#',dsb_TEXT,%message_ok_text(skip),,,button_char(5),,%message_ok_tooltip(skip))
+			xcall B_ENABLE(msg_wnd_id, 'SKIP_#')
+		end
+
+		; DISPLAY MESSAGE TEXT
+		IF (LINE_CNT.EQ.1.and.%passed(mess1)) THEN begin
+			pos = wmax/2-%trim(mess1)/2
+			if (pos.le.0) pos = 1
+			xcall w_disp (msg_wnd_id,wd_color,3, wd_writes,' ',wd_writes, blanks(1,pos) + mess1)	; to center message
+		end ELSE begin
+			if (%passed(mess1)) then xcall w_disp (msg_wnd_id,wd_color,3, wd_writes,' ' + %atrim(mess1))
+					    else xcall w_disp (msg_wnd_id,wd_color,3, wd_writes,' ')
+			if (%passed(mess2)) then xcall w_disp (msg_wnd_id,wd_color,3, wd_writes,' ' + %atrim(mess2))
+					    else xcall w_disp (msg_wnd_id,wd_color,3, wd_writes,' ')
+			if (%passed(mess3)) then xcall w_disp (msg_wnd_id,wd_color,3, wd_writes,' ' + %atrim(mess3))
+					    else xcall w_disp (msg_wnd_id,wd_color,3, wd_writes,' ')
+			if (%passed(mess4)) then xcall w_disp (msg_wnd_id,wd_color,3, wd_writes,' ' + %atrim(mess4))
+					    else xcall w_disp (msg_wnd_id,wd_color,3, wd_writes,' ')
+			if (%passed(mess5)) then xcall w_disp (msg_wnd_id,wd_color,3, wd_writes,' ' + %atrim(mess5))
+					    else xcall w_disp (msg_wnd_id,wd_color,3, wd_writes,' ')
+		end
+		xcall e_state (d_off,d_cursor)	; because we do this we refer the FLAGS (xcall flags)
+		xcall e_state (d_off,d_echo)	; because we do this we refer the FLAGS (xcall flags)
+		xcall flags (50000,1)		; echo off - need to do this because above line does not work second time in ??
+
+		g_entnam =
+		xcall w_updt
+
+		; LOOP TO GET INPUT
+		while (g_entnam.ne.'OK'.and.g_entnam.ne.'O_TIMEOUT'.and.g_entnam.ne.'KEY_EXIT'.and..not.pf_key.and.
+&			g_entnam.ne.'YES'.and.
+&			g_entnam.ne.'NO'.and.
+&			g_entnam.ne.'CAN'.and.
+&			g_entnam.ne.'SKI') begin
+			pf_key =
+			XCALL U_CHR (CHAR_A,MSG_WND_ID,,,,10)
+			XCALL DECML (CHAR_A,CHAR_D)
+			IF (CHAR_D.EQ.27) char_d =					; special code to handle ESC
+											; gi_sts already contains 27
+
+			; FUNCTION KEYS
+											; did they press a function key
+			if (%passed(pf_allowed).and.CHAR_D.eq.0) begin
+				using gi_sts select
+				      (27),   pf_key = 'ESC'		;Escape key
+				      (36),   pf_key = 'F1'		;KEY_EQUIV(8)	;'F1' - MApping to old vt220 values of PF1
+				      (37),   pf_key = 'F2'		;KEY_EQUIV(9)	;'F2' - MApping to old vt220 values of PF2
+				      (38),   pf_key = 'F3'		;KEY_EQUIV(10)	;'F3' - MApping to old vt220 values of PF3
+				      (39),   pf_key = 'F4'		;KEY_EQUIV(39)	;'F4' - MApping to old vt220 values of PF4
+				      (40),   pf_key = 'F5'		;KEY_EQUIV(17)	;
+				      (41),   pf_key = 'F6'		;KEY_EQUIV(17)	;
+				      (42),   pf_key = 'F7'		;KEY_EQUIV(18)	;
+				      (43),   pf_key = 'F8'		;KEY_EQUIV(19)	;
+				      (44),   pf_key = 'F9'		;KEY_EQUIV(20)	;
+				      (45),   pf_key = 'F10'		;
+				      (46),   pf_key = 'SF1'		; Shift
+				      (47),   pf_key = 'SF2'		;
+				      (48),   pf_key = 'SF3'		;
+				      (49),   pf_key = 'SF4'		;
+				      (50),   pf_key = 'SF5'		;
+				      (51),   pf_key = 'SF6'		;
+				      (52),   pf_key = 'SF7'		;
+				      (53),   pf_key = 'SF8'		;
+				      (54),   pf_key = 'SF9'		;
+				      (55),   pf_key = 'SF10'		;
+
+				      (56),   pf_key = 'CF1'		; Ctrl
+				      (57),   pf_key = 'CF2'		;
+				      (58),   pf_key = 'CF3'		;
+				      (59),   pf_key = 'CF4'		;
+				      (60),   pf_key = 'CF5'		;
+				      (61),   pf_key = 'CF6'		;
+				      (62),   pf_key = 'CF7'		;
+				      (63),   pf_key = 'CF8'		;
+				      (64),   pf_key = 'CF9'		;
+				      (65),   pf_key = 'CF10'		;
+				      (66),   pf_key = 'CF11'		;
+				      (67),   pf_key = 'CF12'		; CTRL F12
+				      (68),   pf_key = 'F11'		;KEY_EQUIV(22)	;k_f11
+				      (69),   pf_key = 'F12'		;KEY_EQUIV(39)	;k_f12
+				      (70),   pf_key = 'SF11'				;SHIFT F12
+				      (71),   pf_key = 'SF12'				;SHIFT F12
+				      ;
+				      (98),   pf_key = 'DEL/R'		;KEY_EQUIV(1)	;Delete right
+				      (101),  pf_key = 'DEL/L'		;KEY_EQUIV(1)	;backspace
+				      ;cursor keys
+				      (32),   pf_key = 'UP'		;KEY_EQUIV(3)	;k_up
+				      (33),   pf_key = 'DOWN'		;KEY_EQUIV(4)	;k_down
+				      (34),   pf_key = 'RIGHT'		;KEY_EQUIV(5)	;k_right
+				      (35),   pf_key = 'LEFT'		;KEY_EQUIV(6)	;k_left
+				
+				      (94),   pf_key = 'PREV'		;KEY_EQUIV(37)	;k_prev_screen
+				      (96),   pf_key = 'NEXT'		;KEY_EQUIV(38)	;k_next_screen
+	
+				      (93),   pf_key = 'HOME'		;KEY_EQUIV(37)	;k_prev_screen
+				      (95),   pf_key = 'ENDPAGE'	;KEY_EQUIV(38)	;k_next_screen
+	
+				      (97),   pf_key = 'INSERT'		;KEY_EQUIV(34)	;k_insert_here
+			      endusing
+			end
+
+			; TIME OUT
+			t_wait = t_wait - 10
+			answer = -9
+
+			; in parameter pf_allowed you can put Y to allow all or the valid ones to allow (delimitered with a space)
+			; eg F1 F12 HOME 
+			if (%passed(pfkey).and.%PASSED(pf_allowed).and.pf_key.and.(pf_allowed.eq.'Y'.or.%instr(1,pf_allowed,%atrim(pf_key)+' '))) then begin
+				pfkey = pf_key
+			end else begin
+				answer =
+				if (CHAR_D.eq.13.and..not.g_entnam) begin
+					if (%passed(skip)  .and.skip.eq.'[')	g_entnam = 'SKI'	; check if they pressed enter and default to button if set
+					if (%passed(cancel).and.cancel.eq.'[')	g_entnam = 'CAN'
+					if (%passed(no)    .and.no.eq.'[')	g_entnam = 'NO'
+					if (%passed(yes)   .and.yes.eq.'[')	g_entnam = 'YES'
+					if (%passed(ok)    .and.ok.eq.'[')	g_entnam = 'OK'
+				end
+				if (TIMEOUT.gt.0.and.t_wait.le.0.and.g_entnam.eq.'O_TIMEOUT') answer = 9
+
+													; check if they press first letter of Button
+				UPCASE CHAR_A								; ASSUMES ALL BUTTONS HAVE UPPERCASE FIRST CHAR_ACTER
+				if (%passed(ok)    .and.CHAR_A.eq.button_char(1))	g_entnam = 'OK'
+				if (%passed(yes)   .and.CHAR_A.eq.button_char(2))	g_entnam = 'YES'
+				if (%passed(no)    .and.CHAR_A.eq.button_char(3))	g_entnam = 'NO'
+				if (%passed(cancel).and.CHAR_A.eq.button_char(4))	g_entnam = 'CAN'
+				if (%passed(skip)  .and.CHAR_A.eq.button_char(5))	g_entnam = 'SKI'
+	
+				if (%passed(ok).and.g_entnam.eq.'OK') answer = 1			; load the answer depending on the button pressed
+				if (%passed(yes).and.g_entnam.eq.'YES') answer = 2
+				if (%passed(no).and.g_entnam.eq.'NO') answer = 3
+				if (%passed(cancel).and.g_entnam.eq.'CAN') answer = 4
+				if (%passed(skip).and.g_entnam.eq.'SKI') answer = 5
+				if (g_entnam.eq.'KEY_EXIT') answer = 8					; if we have an EXIT key defines
+				if (t_wait.gt.0.and.g_entnam.eq.'O_TIMEOUT') g_entnam =
+				if (TIMEOUT.eq.0.and.g_entnam.eq.'O_TIMEOUT') g_entnam =
+			end
+		end
+
+		; save current position in case the user has moved the window, if they return within the program put it there
+		prev_p_rows = parent_rows
+		prev_p_cols = parent_cols
+		prev_m_row_pos = %w_info(WIF_ACTPROW, msg_wnd_id)
+		prev_m_col_pos = %w_info(WIF_ACTPCOL, msg_wnd_id)
+
+		; clean up and exit
+		xcall w_PROC (wp_remove,msg_wnd_id)
+		xcall w_PROC (wp_delete,msg_wnd_id)
+		g_entnam =
+		xcall w_updt
+	END
+	XCALL FLAGS (FLAGS)	; reset flags
+	if (u_error.eq.329.and.VT_BATCH.ne.'B') u_finish
+	XRETURN
+END
+
+FUNCTION MESSAGE_OK_TEXT	; function to return Button Text
+	LSTRING	,A
+RECORD
+	POS	,D3
+PROC
+	POS = %INSTR(1,LSTRING,'\')
+	IF (.NOT.POS) POS = %INSTR(1,LSTRING,'+')
+	IF (POS) THEN BEGIN
+		IF (POS.LE.1)	THEN FRETURN ('')
+				ELSE FRETURN (LSTRING(1,POS-1))	; REMOVE '\' OR '+'
+	END ELSE BEGIN
+		FRETURN (%ATRIM(LSTRING))
+	END
+END
+
+FUNCTION MESSAGE_OK_CHAR	; function to return trigger CHAR_Acter for button (first CHAR_Acter usually)
+	LSTRING	,A
+RECORD
+	POS	,D3
+	IDX	,D2
+	RCHAR	,A1
+PROC
+	RCHAR = 
+	IDX = 1
+	POS = %TRIM(LSTRING)
+	WHILE ((RCHAR.EQ.'['.OR.RCHAR.EQ.' ').AND.IDX.LE.POS) BEGIN
+		RCHAR = LSTRING(IDX:1)
+		INCR IDX
+	END
+	IF (RCHAR.EQ.']') RCHAR =
+	FRETURN (RCHAR)
+END
+FUNCTION MESSAGE_OK_TOOLTIP	; function to return Tool Tip
+	LSTRING	,A
+RECORD
+	POS	,D3
+PROC
+	POS = %INSTR(1,LSTRING,'\')
+	IF (.NOT.POS) POS = %INSTR(1,LSTRING,'+')
+	IF (POS) THEN BEGIN
+		IF (POS.LT.%TRIM(LSTRING))	THEN FRETURN (LSTRING(POS+1,%TRIM(LSTRING)))	; REMOVE '\' OR '+'
+						ELSE FRETURN ('')
+	END ELSE BEGIN
+		FRETURN ('')
+	END
+END

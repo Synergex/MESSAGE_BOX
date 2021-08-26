@@ -1,0 +1,130 @@
+; SAMPLE PROGRAM CALLING MESSAGE_BOX
+
+; see compile instruction at bottom of file
+
+.include "WND:windows.def"
+
+record
+	wndw_1		,i4
+	answer		,d1
+	W_COLS		,D3	,160
+	W_ROWS		,D3	,30
+	pfkey		,a10
+	VT_BATCH	,A1
+	POS		,D4
+	INPUT		,A10
+PROC
+	open (15,o,'tt:')
+	writes (15,'  This Sample program will Demonstrate Message routine using both Old style DBL Code')
+	writes (15,'  and UT-Toolkit Code')
+	writes (15,'  ')
+	writes (15,'  Demo Program for placing Message Box in center of current Synergy Window')
+	writes (15,'  Demo Using OLD style code')
+	writes (15,'  Returns which Button Number user selected (1-5), or 9 if timed out (configurable)')
+	writes (15,'  Returns -9 and the valid Function Key pressed - if enabled (configurable)')
+	writes (15,'  Can be configured to only enable one Button, or upto five Buttons')
+	writes (15,'  Button Text is configurable and with Tool Tip available')
+	writes (15,'  Can configure a Default Button for when the user presses Enter')
+	
+	writes (15,'  Can be configured to enable specified Function Keys (or All)')
+	writes (15,'  Can be configured to time out (n seconds) or wait until user makes correct')
+	writes (15,'  selection')
+	writes (15,'')
+	writes (15,'  If the user drags the message box out of the way, it will be positioned to ')
+	writes (15,'  the new position in the current window')
+	writes (15,'  You can try pressing Function Keys and see response')
+	while (answer.ne.2.and.answer.ne.-1) begin
+		XCALL MESSAGE_BOX (15,120,'Old Code Demo-1','[ OK ]+Press if OK to continue','YES','NO','BUT_4+Press to do something',,ANSWER,
+&		'MESSAGE LINE 1','Try any Button or Function Key','All function keys are active',,'Finally Click Yes to advance','Y',pfkey)
+		writes (15,STRING(%TIME,'ZX:XX:XX') + ' Pressed button ' + %string(ANSWER) + ' ' + pfkey)
+	end
+	ANSWER =
+	while (answer.ne.2.and.answer.ne.-1) begin
+		XCALL MESSAGE_BOX (15,120,'Old Code Demo-1','[ OK ]+Press if OK to continue','YES','NO','BUT_4+Press to do something','Five',ANSWER,
+&		'MESSAGE LINE 1','Try any Button or Function Key','All function keys are active',,'Finally Click Yes to advance','Y',pfkey)
+		writes (15,STRING(%TIME,'ZX:XX:XX') + ' Pressed button ' + %string(ANSWER) + ' ' + pfkey)
+	end
+	writes (15,'Wait ... UI-Toolkit version next')
+	sleep 1
+
+	while (w_rows.gt.15) begin
+		u_start (,0,0,,W_ROWS,W_COLS,,250,,253)
+		xcall w_proc(WP_CREATE, wndw_1, "window1", W_ROWS, W_COLS)
+		xcall w_area(wndw_1, WA_FILL, ' ')
+		xcall w_proc(WP_PLACE, wndw_1, 1, 1)
+		w_disp (wndw_1,wd_color,5,wd_updt)
+		w_disp (wndw_1,wd_clear,wd_updt)
+		w_disp (wndw_1,wd_writes,'  Demo Program for placing Message Box in center of current Synergy Window')
+		w_disp (wndw_1,wd_writes,'  Using UI_Toolkit style code')
+		w_disp (wndw_1,wd_writes,'  Returns which Button Number user selected (1-5), or 9 if timed out (configurable)')
+		w_disp (wndw_1,wd_writes,'  Returns -9 and the valid Function Key pressed - if enabled (configurable)')
+		w_disp (wndw_1,wd_writes,'  Can be configured to only enable one Button, or upto five Buttons')
+		w_disp (wndw_1,wd_writes,'  Button Text is configurable and with Tool Tip available')
+		w_disp (wndw_1,wd_writes,'  Can configure a Default Button for when the user presses Enter')
+	
+		w_disp (wndw_1,wd_writes,'  Can be configured to enable specified Function Keys (or All)')
+		w_disp (wndw_1,wd_writes,'  Can be configured to time out (n seconds) or wait until user makes correct selection')
+		w_disp (wndw_1,wd_writes,'')
+		w_disp (wndw_1,wd_writes,'  If the user drags the message box out of the way, it will locate there next time if the message is the same size')
+		w_disp (wndw_1,wd_writes,'  You can try pressing Function Keys and see response')
+		w_disp (wndw_1,wd_writes,'  Keep clicking YES to see how it works with different size windows')
+		w_disp (wndw_1,wd_writes,'  Clicking NO after you have dragged the message out of the way to see how it works')
+		answer =
+		WHILE (ANSWER.NE.2.and.answer.ne.-1) BEGIN
+			XCALL MESSAGE_BOX (WNDW_1,120,'Demo-1','[ OK ]+Press if OK to continue','YES','NO','BUT_4+Press to do something',,ANSWER,
+&			'MESSAGE LINE 1',,'all function keys are active',,'Click Yes to next screen','Y',pfkey)
+			w_disp (wndw_1,wd_writes,%STRING(%TIME,'ZX:XX:XX') + ' Pressed button ' + %string(ANSWER) + ' ' + pfkey,WD_UPDT)
+			sleep 0.1
+		END
+		answer =
+		WHILE (ANSWER.eq.0.OR.ANSWER.EQ.-9) BEGIN
+			XCALL MESSAGE_BOX (WNDW_1,120,'Demo-2','[ OK ]+Press if OK to continue','YES','ABORT+To abort from program',,,ANSWER,
+&			'MESSAGE LINE 1',,'F1 & F12 function keys are active','Click OK to see different size window','click Abort to exit program','F1 F12 ',pfkey)
+			w_disp (wndw_1,wd_writes,%STRING(%TIME,'ZX:XX:XX') + ' Pressed button ' + %string(ANSWER) + ' ' + pfkey,WD_UPDT)
+			sleep 0.1
+		END
+
+		if (answer.eq.3) then begin
+			w_rows = 0	; cause and end to loop
+		end else begin
+			XCALL MESSAGE_BOX (WNDW_1,20,'Demo-3','[ OK ]+Press if OK to continue','YES','ABORT+To abort from program',,,ANSWER,'Message Box text','Do something','No function keys')
+			w_disp (wndw_1,wd_writes,%STRING(%TIME,'ZX:XX:XX') + ' Pressed button ' + %string(ANSWER) + ' ' + pfkey,WD_UPDT)
+			sleep 0.1
+
+			answer = 3
+			while (answer.eq.3) begin
+				XCALL MESSAGE_BOX (WNDW_1,20,'Demo-3','[ OK ]','YES','NO','SKIP','CANCEL',ANSWER,'Wide Message',
+&				'Drag the message box and then Click No to see it position to the new location',
+&				'abcdefghijklmnopqrstugvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUGVWXYZ1234567890')
+				w_disp (wndw_1,wd_writes,%STRING(%TIME,'ZX:XX:XX') + ' Pressed button ' + %string(ANSWER) + ' ' + pfkey,WD_UPDT)
+				sleep 0.1
+			end
+		end
+
+		; clean up 
+		xcall w_PROC (wp_remove,wndw_1)
+		xcall w_PROC (wp_delete,wndw_1)
+		w_rows = w_rows - 2
+		w_cols = w_cols - 10
+		u_finish
+	end
+	SLEEP 1
+	xcall getlog ('BATCH',VT_BATCH,POS)
+	IF (VT_BATCH.NE.'B') BEGIN
+		WRITES (15,'')
+		WRITES (15,'')
+		WRITES (15,'')
+		WRITES (15,'Try setting BATCH variable to B and run again')
+		WRITES (15,'SET BATCH=B')
+		WRITES (15,'')
+		DISPLAY (15,'Press Enter to continue or B Enter and the program will restart in Batch mode ? ')
+		READS (15,INPUT)
+		IF (INPUT.EQ.'B') BEGIN
+			XCALL SETLOG ('BATCH','B',POS)
+			STOP 'DEMO_MESSAGE_BOX'
+		END
+	END
+	XCALL FLAGS (00000000)
+	STOP
+END
+
